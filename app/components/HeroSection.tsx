@@ -2,7 +2,8 @@
 import { useState } from "react";
 import { Gallery, UpperArrow } from "./common/Icons";
 import { addDoc, collection } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "../lib/firebase";
 
 const HeroSection = () => {
   const [formData, setFormData] = useState({
@@ -36,35 +37,102 @@ const HeroSection = () => {
     }));
   };
   const [loading, setLoading] = useState(false);
+
+  const uploadFile = async (file: File, path: string) => {
+    const storageRef = ref(storage, path);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+  };
+
   const handleSubmit = async (e: any) => {
     e.preventDefault();
 
     try {
       setLoading(true);
 
+      // Upload files and get URLs
+      const frontLicenseUrl = formData.frontLicense
+        ? await uploadFile(
+            formData.frontLicense,
+            `licenses/${Date.now()}_front_${(formData.frontLicense as File).name}`,
+          )
+        : null;
+      const backLicenseUrl = formData.backLicense
+        ? await uploadFile(
+            formData.backLicense,
+            `licenses/${Date.now()}_back_${(formData.backLicense as File).name}`,
+          )
+        : null;
+      const vanInsuranceUrl = formData.vanInsuranceFile
+        ? await uploadFile(
+            formData.vanInsuranceFile,
+            `insurances/${Date.now()}_van_${(formData.vanInsuranceFile as File).name}`,
+          )
+        : null;
+      const goodsInsuranceUrl = formData.goodsInsuranceFile
+        ? await uploadFile(
+            formData.goodsInsuranceFile,
+            `insurances/${Date.now()}_goods_${(formData.goodsInsuranceFile as File).name}`,
+          )
+        : null;
+      const liabilityInsuranceUrl = formData.liabilityInsuranceFile
+        ? await uploadFile(
+            formData.liabilityInsuranceFile,
+            `insurances/${Date.now()}_liability_${(formData.liabilityInsuranceFile as File).name}`,
+          )
+        : null;
+
+      // 🔹 1. Firestore me save karo
       const docRef = await addDoc(collection(db, "drivers"), {
         vehicleType: formData.vehicleType,
         vehicleNumber: formData.vehicleNumber,
 
+        frontLicenseUrl,
+        backLicenseUrl,
+
+        vanInsuranceUrl,
         vanStartDate: formData.vanStartDate,
         vanEndDate: formData.vanEndDate,
 
+        goodsInsuranceUrl,
         goodsStartDate: formData.goodsStartDate,
         goodsEndDate: formData.goodsEndDate,
 
+        liabilityInsuranceUrl,
         liabilityStartDate: formData.liabilityStartDate,
         liabilityEndDate: formData.liabilityEndDate,
 
         termsAccepted: formData.termsAccepted,
-
         createdAt: new Date(),
       });
 
-      console.log("Document written with ID:", docRef.id);
-      alert("Form submitted successfully!");
+      console.log("Firestore ID:", docRef.id);
+
+      // 🔹 2. Resend API call (EMAIL SEND)
+      const emailRes = await fetch("/api/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          vehicleType: formData.vehicleType,
+          vehicleNumber: formData.vehicleNumber,
+          vanStartDate: formData.vanStartDate,
+          vanEndDate: formData.vanEndDate,
+          goodsStartDate: formData.goodsStartDate,
+          goodsEndDate: formData.goodsEndDate,
+          liabilityStartDate: formData.liabilityStartDate,
+          liabilityEndDate: formData.liabilityEndDate,
+        }),
+      });
+
+      const emailData = await emailRes.json();
+      console.log("Email Response:", emailData);
+
+      alert("Form submitted + Email sent ✅");
     } catch (error) {
-      console.error("Error adding document:", error);
-      alert("Something went wrong");
+      console.error("Error:", error);
+      alert("Something went wrong ❌");
     } finally {
       setLoading(false);
     }
@@ -173,7 +241,7 @@ const HeroSection = () => {
                   className="absolute cursor-pointer top-0 left-0 w-full h-full opacity-0"
                   type="file"
                   onChange={handleChange}
-                  name="vanInsurance"
+                  name="vanInsuranceFile"
                 />
                 <div className="mx-auto w-fit">
                   <Gallery />
@@ -215,7 +283,7 @@ const HeroSection = () => {
                   className="absolute cursor-pointer top-0 left-0 w-full h-full opacity-0"
                   type="file"
                   onChange={handleChange}
-                  name="goodsInsurance"
+                  name="goodsInsuranceFile"
                 />
                 <div className="mx-auto w-fit">
                   <Gallery />
